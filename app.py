@@ -4,86 +4,111 @@ import pandas as pd
 from datetime import datetime
 import openai
 
-st.set_page_config(page_title="HCSC Strategic Intel Agent", layout="wide")
+st.set_page_config(page_title="HCSC PBM Intel: Expert Edition", layout="wide")
 
-# Sidebar for Control
-st.sidebar.title("🛡️ HCSC/Prime Control")
+# Sidebar
+st.sidebar.title("🛡️ HCSC/Prime Expert Control")
+st.sidebar.info("ON-DEMAND MODE: Analysis only runs when triggered.")
 api_key = st.sidebar.text_input("Enter OpenAI Key", type="password")
-refresh_btn = st.sidebar.button("🔄 REFRESH DATA & ANALYZE")
+refresh_btn = st.sidebar.button("🚀 EXECUTE FULL MARKET ANALYSIS")
 
-# State for timestamp
 if 'last_refresh' not in st.session_state:
     st.session_state['last_refresh'] = "Never"
 
-def analyze_intel(prompt_type, data):
+def analyze_expert_intel(prompt_type, data, custom_query=False):
     if not api_key:
-        st.error("Please enter your OpenAI Key in the sidebar.")
+        st.error("Please enter OpenAI Key.")
         return None
     
     client = openai.OpenAI(api_key=api_key)
     
-    system_prompt = """You are the Senior Strategic Consultant for HCSC/Prime Therapeutics. 
-    Analyze PBM news for 150k-life ASO accounts (National & Enterprise). 
-    Focus on TX and Federal updates.
+    # THE "ACTUARY + STRATEGIST" SYSTEM PROMPT
+    system_prompt = """You are a Senior PBM Actuary and Lead Strategic Consultant for HCSC/Prime Therapeutics. 
+    You are analyzing the PBM landscape for National/Enterprise ASO-funded employer groups (150k+ lives).
     
-    For every item, provide:
-    1. **Layman's Terms:** Simple explanation for an HR Director.
-    2. **ASO Client Impact:** Financial risk (PMPM) and Fiduciary impact.
-    3. **The Prime Sell-Against:** 
-       - Against Big 3 (CVS/ESI/Optum): Focus on lack of alignment vs Prime's Blue ownership.
-       - Against Niches (Rightway/SmithRx/CapRx): Focus on their tech-only model vs Prime's Integrated Medical+Rx data.
-       - Biosimilars: Address Humira/Stelara lowest-net-cost strategy."""
+    YOUR RIGOROUS STANDARDS:
+    1. MATERIALITY: Focus ONLY on events that impact PMPM, Fiduciary risk, or Pharmacy Contract mechanics.
+    2. NUANCE & DETAIL: Include specific Bill Numbers (e.g., TX SB 1137, HR 2884), drug names, and competitor tactics.
+    3. TEMPORAL IMPACT: For every analysis, you MUST provide:
+       - 1-Year Impact: Implementation hurdles, immediate cost shifts, member disruption.
+       - 3-Year Impact: Rebate erosion, contract cycle changes, market consolidation.
+       - 5-Year Impact: Total structural shift in the PBM model (e.g., the move away from rebates).
+    4. THE PRIME SELL-AGAIN: Explain why HCSC/Prime's Blue-aligned, medical-integrated model is a superior hedge against this news compared to the Big 3 (CVS/ESI/Optum) or tech-only 'Navigation' niches (Rightway/CapRx).
+    """
 
     try:
+        # If it's a general search query, we want the AI to use its full internal knowledge
+        model_to_use = "gpt-4o"
+        user_content = f"{prompt_type}: {data}"
+        
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model_to_use,
             messages=[{"role": "system", "content": system_prompt},
-                      {"role": "user", "content": f"{prompt_type}: {data}"}]
+                      {"role": "user", "content": user_content}]
         )
         return response.choices[0].message.content
     except Exception as e:
-        if "insufficient_quota" in str(e).lower():
-            return "❌ ERROR: Your OpenAI Credits have run out. Please log into platform.openai.com and add funds."
         return f"❌ Error: {str(e)}"
 
 # --- HEADER ---
-st.title("🛡️ PBM Strategic Intel Agent")
-st.write(f"**Data last refreshed:** {st.session_state['last_refresh']}")
+st.title("🛡️ PBM Strategic Intel: Expert Mode")
+st.write(f"**Data Last Refreshed:** {st.session_state['last_refresh']}")
 
-# --- TOP SECTION: CLIENT CALL CHEAT SHEET ---
-st.info("### 📞 Today's Client Call Cheat Sheet (Top 3 Topics)")
-if refresh_btn:
-    st.session_state['last_refresh'] = datetime.now().strftime("%A, %b %d at %I:%M %p")
-    cheat_prompt = "Give me 3 high-value talking points for a biweekly ASO client call based on current TX PBM updates, Rightway/Niche competition, and Humira/Stelara biosimilars."
-    st.markdown(analyze_intel("CHEAT SHEET", cheat_prompt))
-else:
-    st.write("Click 'Refresh Data' in the sidebar to generate today's call topics.")
-
-# --- TABS ---
-tab1, tab2, tab3 = st.tabs(["🏛️ Gov & Regulatory (TX/Fed)", "📈 Market & Competitors", "🕵️ Rumor Mill"])
+# --- TABBED INTERFACE ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🏛️ Material Regulatory (TX/Fed)", 
+    "📈 Market & Competitor Deep-Dive", 
+    "🕵️ Rumor & Nuance Lab",
+    "🔍 Strategic Search Query"
+])
 
 with tab1:
-    st.header("Texas & Federal Updates")
-    # Feeds for PBM Regulatory News
-    f = feedparser.parse("https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=PBM")
-    for entry in f.entries[:3]:
-        with st.expander(f"NEWS: {entry.title}"):
-            if refresh_btn:
-                st.markdown(analyze_intel("REGULATORY ANALYSIS", f"{entry.title}: {entry.summary}"))
+    st.header("High-Materiality Regulatory Watch")
+    st.caption("Focus: Bill Numbers, ERISA Risk, and TX Compliance.")
+    # Wider Net for Regulatory
+    feeds = [
+        "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=PBM",
+        "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=Pharmacy+Benefit"
+    ]
+    if refresh_btn:
+        st.session_state['last_refresh'] = datetime.now().strftime("%A, %b %d at %I:%M %p")
+        for url in feeds:
+            f = feedparser.parse(url)
+            for entry in f.entries[:5]: # Wide Net
+                with st.expander(f"📜 DETAILED IMPACT: {entry.title}"):
+                    st.markdown(analyze_expert_intel("REGULATORY DEEP-DIVE", f"Title: {entry.title}\nSummary: {entry.summary}"))
+    else:
+        st.info("Click 'EXECUTE FULL MARKET ANALYSIS' to pull data.")
 
 with tab2:
-    st.header("Market, Biosimilars & Competitors")
-    # Feed for Competitor/Industry News
-    m_feed = feedparser.parse("https://www.drugchannels.net/feeds/posts/default")
-    for entry in m_feed.entries[:5]:
-        with st.expander(f"MARKET: {entry.title}"):
-            if refresh_btn:
-                st.markdown(analyze_intel("MARKET ANALYSIS", f"{entry.title}: {entry.summary}"))
+    st.header("Market Moves & Competitor Tactics")
+    st.caption("Focus: Big 3 Margin Grabs vs. Niche PBM (Rightway) Tech Pitch.")
+    m_feeds = ["https://www.drugchannels.net/feeds/posts/default"]
+    if refresh_btn:
+        for url in m_feeds:
+            f = feedparser.parse(url)
+            for entry in f.entries[:8]: # Wider Net
+                with st.expander(f"📈 STRATEGIC ANALYSIS: {entry.title}"):
+                    st.markdown(analyze_expert_intel("MARKET DYNAMICS", f"Title: {entry.title}\nSummary: {entry.summary}"))
+    else:
+        st.info("Click 'EXECUTE FULL MARKET ANALYSIS' to pull data.")
 
 with tab3:
-    st.header("🕵️ Rumor Mill")
-    st.write("Hear a rumor about Rightway or CVS? Type it below for a strategic counter-argument.")
-    rumor_in = st.text_area("Market rumor details:")
-    if st.button("Analyze Rumor"):
-        with st.spinner("Thinking..."):
-            st.markdown(analyze_intel("RUMOR ANALYSIS", rumor_in))
+    st.header("🕵️ Rumor & Nuance Lab")
+    st.write("Analyze 'on-the-street' intel with 1, 3, and 5-year impact modeling.")
+    rumor_in = st.text_area("Detail the rumor or trend here:", placeholder="e.g. Rightway is moving to a shared-savings model for GLP-1s in Texas...", height=150)
+    if st.button("Analyze Nuance"):
+        with st.spinner("Calculating long-term impact..."):
+            st.markdown(analyze_expert_intel("RUMOR ANALYSIS", rumor_in))
+
+with tab4:
+    st.header("🔍 Strategic Search Query")
+    st.write("Ask a specific strategic question. The AI will cross-reference its knowledge of PBMs, TX law, and HCSC strategy.")
+    search_query = st.text_input("What would you like to research?", placeholder="e.g. Explain the impact of TX SB 1137 on ASO audit rights vs Big 3 PBMs.")
+    if st.button("Search & Analyze"):
+        with st.spinner("Executing Research..."):
+            st.markdown(analyze_expert_intel("STRATEGIC RESEARCH QUERY", search_query))
+
+# --- FOOTER ---
+st.divider()
+st.caption("Confidential Strategic Tool for HCSC/Prime Therapeutics Internal Use Analysis.")
