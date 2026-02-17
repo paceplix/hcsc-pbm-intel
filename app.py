@@ -1,16 +1,26 @@
 import streamlit as st
 import feedparser
-import pandas as pd
+import pd
 from datetime import datetime
 import openai
 
 st.set_page_config(page_title="HCSC PBM Strategic Command", layout="wide")
 
-# Sidebar
+# --- SIDEBAR CONTROL ---
 st.sidebar.title("🛡️ HCSC ASO Expert Control")
-st.sidebar.info("HIGH-PROBABILITY FOCUS: Only surfacing regs with 1-2 year implementation viability.")
 api_key = st.sidebar.text_input("Enter OpenAI Key", type="password")
-refresh_btn = st.sidebar.button("🚀 EXECUTE COMMERCIAL ANALYSIS")
+
+st.sidebar.divider()
+st.sidebar.subheader("Global View Mode")
+# This toggle now impacts every single analysis in the app
+view_mode = st.sidebar.radio(
+    "Select Analysis Depth:", 
+    ["CEO View", "Detailed View"], 
+    help="CEO View: 30-sec bullets & risk levels. Detailed View: Actuarial math, bill numbers, and 5-year roadmaps."
+)
+
+st.sidebar.divider()
+refresh_btn = st.sidebar.button("🚀 EXECUTE FULL MARKET ANALYSIS")
 
 if 'last_refresh' not in st.session_state:
     st.session_state['last_refresh'] = "Never"
@@ -22,17 +32,23 @@ def analyze_aso_intel(prompt_type, data):
     
     client = openai.OpenAI(api_key=api_key)
     
-    system_prompt = """You are a Senior PBM Actuary and Lead Strategic Consultant for HCSC/Prime Therapeutics. 
+    # TONAL SETTINGS BASED ON GLOBAL TOGGLE
+    if view_mode == "CEO View":
+        tone_instruction = "Provide a 30-second Executive Summary. Use Green/Yellow/Red risk indicators. Focus ONLY on the bottom-line financial impact to the ASO group. Use short, punchy bullets."
+    else:
+        tone_instruction = "Provide a deep-dive actuarial and strategic analysis. Include specific bill numbers, contract nuances, and 1, 3, and 5-year financial impact modeling. Be technical and detailed."
+
+    system_prompt = f"""You are a Senior PBM Actuary and Lead Strategic Consultant for HCSC/Prime Therapeutics. 
     You manage 150,000 lives for National/Enterprise ASO employer groups.
     
+    CURRENT VIEW MODE: {view_mode}
+    TONE REQUIREMENT: {tone_instruction}
+    
     YOUR RIGOROUS FILTERS:
-    1. FEDERAL VS STATE: Clearly distinguish between Federal laws and State-level (specifically Texas) mandates.
-    2. 1-2 YEAR VIABILITY: Ignore 'long-shot' bills or political theater. Focus ONLY on legislation/rules with a high probability of material impact in the next 24 months.
-    3. ASO MATERIALITY: Focus on PMPM shifts, Stop-loss impact, and ERISA Fiduciary liability (specifically the J&J/Lewandowski case implications).
-    4. THE PRIME PIVOT: 
-       - Against 'Big 3': Contrast their margin-shifting (Cordavis/Rebate harvesting) with Prime's Lowest-Net-Cost alignment.
-       - Against 'Niches' (Rightway/CapRx): Contrast their 'app-navigation' with HCSC's 'Integrated Health Management' (Total Medical + Rx visibility).
-    5. TEMPORAL ROADMAP: Always provide a 1-year (immediate) and 3-year (structural) outlook.
+    1. ASO FOCUS ONLY: Ignore Medicare/Medicaid unless material to Commercial ASO cost-shifting.
+    2. COMPETITOR SPECIFICITY: You MUST explicitly name-check: CVS/Caremark, ESI (Express Scripts/Cigna), OptumRx, Rightway, Capital Rx, SmithRx, and Navitus.
+    3. 1-2 YEAR VIABILITY: Focus on high-probability impact (e.g., TX SB 1137).
+    4. THE PRIME PIVOT: Contrast HCSC/Prime's Integrated Health Management (Total Medical + Rx visibility) against competitor 'Margin Shifting' or tech-only 'Navigation' (Rightway).
     """
 
     try:
@@ -46,83 +62,75 @@ def analyze_aso_intel(prompt_type, data):
         return f"❌ Error: {str(e)}"
 
 # --- HEADER ---
-st.title("🛡️ PBM Strategic Command: ASO Expert Mode")
-st.write(f"**Target Market:** Commercial ASO (National/Enterprise) | **Last Analysis:** {st.session_state['last_refresh']}")
+st.title(f"🛡️ PBM Strategic Command [{view_mode}]")
+st.write(f"**Target Market:** Commercial ASO (National/Enterprise) | **Last Analysis Run:** {st.session_state['last_refresh']}")
 
-# --- TABBED INTERFACE ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏛️ Gov: Federal vs. State", 
+# --- TABS ---
+tab_brief, tab_gov, tab_comp, tab_glp, tab_lab = st.tabs([
+    "📊 Executive Briefing",
+    "🏛️ Gov: Fed vs. State", 
     "📈 Competitor Tactics", 
     "💉 GLP-1 Strategic Command",
-    "🕵️ Rumor & Nuance Lab",
-    "🔍 Strategic Search Query"
+    "🕵️ Rumor & Search Lab"
 ])
 
-with tab1:
+with tab_brief:
+    st.header(f"Executive Strategic Summary ({view_mode})")
+    if refresh_btn:
+        st.session_state['last_refresh'] = datetime.now().strftime("%A, %b %d at %I:%M %p")
+        with st.spinner("Synthesizing market data..."):
+            summary_prompt = "Summarize the most material PBM market changes, legislative updates (TX & Fed), and competitor moves for a Jumbo ASO client."
+            st.markdown(analyze_aso_intel("EXECUTIVE SUMMARY", summary_prompt))
+    else:
+        st.info("Click 'EXECUTE FULL MARKET ANALYSIS' in the sidebar to generate.")
+
+with tab_gov:
     st.header("High-Probability Regulatory Watch")
-    st.caption("Focus: 1-2 Year Implementation Window. Categorized by Federal vs. State Mandates.")
-    
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("🇺🇸 Federal Updates")
-        f_feeds = ["https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=PBM"]
-        if refresh_btn:
-            st.session_state['last_refresh'] = datetime.now().strftime("%A, %b %d at %I:%M %p")
-            for url in f_feeds:
-                f = feedparser.parse(url)
-                for entry in f.entries[:5]:
-                    with st.expander(f"FED IMPACT: {entry.title}"):
-                        st.markdown(analyze_aso_intel("FEDERAL REGULATORY DEEP-DIVE", f"Title: {entry.title}\nSummary: {entry.summary}"))
-        else: st.info("Run analysis to see Federal updates.")
-
+        f_feeds = feedparser.parse("https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=PBM")
+        for entry in f_feeds.entries[:3]:
+            with st.expander(f"FED: {entry.title}"):
+                if refresh_btn: st.markdown(analyze_aso_intel("FEDERAL REGULATORY", entry.summary))
     with col2:
-        st.subheader("🇨🇱 State Updates (Focus: Texas)")
-        st.caption("Analyzing TX SB 1137, white-bagging bans, and network transparency.")
+        st.subheader("🇨🇱 State Updates (Texas Focus)")
         if refresh_btn:
-            # Note: Specific state RSS are rare, so we use the AI to pull/verify recent TX-specific knowledge
-            st.markdown(analyze_aso_intel("TEXAS STATE MANDATE ANALYSIS", "Analyze current high-probability TX PBM legislation (e.g. SB 1137, HB 1763) and network transparency rules affecting ASO groups in the next 18 months."))
-        else: st.info("Run analysis to see State updates.")
+            st.markdown(analyze_aso_intel("TEXAS STATE MANDATE", "Deep analysis of TX SB 1137, HB 1763, and TDI transparency rules impacting ASO audit/network rights."))
 
-with tab2:
-    st.header("Big 3 vs. Niche Tactics")
-    st.caption("Analysis of ESI/CVS margin shifting vs Rightway tech pitches.")
-    m_feeds = ["https://www.drugchannels.net/feeds/posts/default"]
-    if refresh_btn:
-        for url in m_feeds:
-            f = feedparser.parse(url)
-            for entry in f.entries[:5]:
-                with st.expander(f"📈 COMPETITOR MOVE: {entry.title}"):
-                    st.markdown(analyze_aso_intel("MARKET DYNAMICS", f"Title: {entry.title}\nSummary: {entry.summary}"))
+with tab_comp:
+    st.header("Competitor Dynamics & Tactics")
+    st.caption("CVS/Caremark, ESI, OptumRx, Rightway, Capital Rx, SmithRx.")
+    m_feeds = feedparser.parse("https://www.drugchannels.net/feeds/posts/default")
+    for entry in m_feeds.entries[:5]:
+        with st.expander(f"MOVE: {entry.title}"):
+            if refresh_btn: st.markdown(analyze_aso_intel("COMPETITOR TACTICS", f"{entry.title}: {entry.summary}"))
 
-with tab3:
+with tab_glp:
     st.header("💉 GLP-1 Strategic Command")
-    st.write("Specialized ASO analysis of the weight-loss spend crisis.")
-    glp_query = st.selectbox("Select GLP-1 Strategy to Analyze:", [
-        "Impact of LillyDirect/DTC models on ASO Clinical Oversight",
-        "Implementing custom BMI thresholds & 6-month clinical wait-periods",
-        "Custom Copay Tiers vs. Manufacturer Coupon 'Gapping' Strategies",
-        "Stop-Loss Attachment Point Volatility due to GLP-1 Spend",
-        "Selling Prime Integrated Management vs. Rightway Navigation for GLP-1s"
-    ])
-    if st.button("Execute GLP-1 Analysis"):
-        with st.spinner("Analyzing Clinical/Financial viability..."):
-            st.markdown(analyze_aso_intel("GLP-1 STRATEGY DEEP-DIVE", glp_query))
+    glp_col1, glp_col2 = st.columns([1, 2])
+    with glp_col1:
+        st.subheader("Select Focus")
+        glp_topic = st.radio("Strategy Topic:", [
+            "LillyDirect & DTC impact on ASO Clinical Oversight",
+            "Custom BMI & Clinical Wait-Periods (Fiduciary Impact)",
+            "Manufacturer Coupon Gapping vs. Plan Design",
+            "Stop-Loss Attachment Point Volatility (1-5 Year Outlook)",
+            "Prime Integration vs. Rightway Navigation for GLP-1s"
+        ])
+        analyze_glp = st.button("Generate GLP-1 Strategy")
+    with glp_col2:
+        if analyze_glp:
+            with st.spinner("Analyzing..."):
+                st.markdown(analyze_aso_intel("GLP-1 STRATEGY", glp_topic))
 
-with tab4:
-    st.header("🕵️ Rumor & Nuance Lab")
-    rumor_in = st.text_area("Detail the market rumor/competitor quote:", placeholder="e.g. 'Rightway is pitching a shared-savings GLP-1 model in TX'...", height=150)
-    if st.button("Analyze Nuance"):
-        with st.spinner("Calculating 1, 3, and 5-year ASO impact..."):
-            st.markdown(analyze_aso_intel("ASO RUMOR ANALYSIS", rumor_in))
-
-with tab5:
-    st.header("🔍 Strategic Search Query")
-    search_query = st.text_input("Ask a specific question (e.g. How does the J&J lawsuit impact my ASO clients?):")
-    if st.button("Search & Analyze"):
-        with st.spinner("Executing Research..."):
-            st.markdown(analyze_aso_intel("ASO RESEARCH QUERY", search_query))
+with tab_lab:
+    st.header("🕵️ Strategic Intelligence Lab")
+    rumor_in = st.text_area("Market Rumor or Search Question:", placeholder="e.g. 'Hearing Rightway is pitching a Texas Jumbo account with a $0 spread and shared savings on GLP-1s'...")
+    if st.button("Execute Lab Research"):
+        with st.spinner("Analyzing..."):
+            st.markdown(analyze_aso_intel("STRATEGIC LAB QUERY", rumor_in))
 
 # --- FOOTER ---
 st.divider()
-st.caption("HCSC/Prime Therapeutics Internal Strategic Analysis Tool. ASO Market Focus (National/Enterprise).")
+st.caption(f"HCSC/Prime Therapeutics Internal Strategic Analysis. Current View: {view_mode}")
