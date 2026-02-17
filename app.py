@@ -1,6 +1,6 @@
 import streamlit as st
 import feedparser
-import pd
+import pandas as pd
 from datetime import datetime
 import openai
 
